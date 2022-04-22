@@ -36,6 +36,8 @@ var (
 	PriceBasedExpanderName = "price"
 	// PriorityBasedExpanderName selects a node group based on a user-configured priorities assigned to group names
 	PriorityBasedExpanderName = "priority"
+	// BalanceExpanderName selects a node based on least amount of nodes
+	BalanceExpanderName = "balance"
 )
 
 // Option describes an option to expand the cluster.

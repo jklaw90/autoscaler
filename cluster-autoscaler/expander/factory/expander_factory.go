@@ -20,6 +20,7 @@ import (
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	"k8s.io/autoscaler/cluster-autoscaler/context"
 	"k8s.io/autoscaler/cluster-autoscaler/expander"
+	"k8s.io/autoscaler/cluster-autoscaler/expander/balance"
 	"k8s.io/autoscaler/cluster-autoscaler/expander/mostpods"
 	"k8s.io/autoscaler/cluster-autoscaler/expander/price"
 	"k8s.io/autoscaler/cluster-autoscaler/expander/priority"
@@ -55,6 +56,8 @@ func ExpanderStrategyFromString(expanderFlag string, cloudProvider cloudprovider
 		stopChannel := make(chan struct{})
 		lister := kubernetes.NewConfigMapListerForNamespace(kubeClient, stopChannel, configNamespace)
 		return priority.NewStrategy(lister.ConfigMaps(configNamespace), autoscalingKubeClients.Recorder)
+	case expander.BalanceExpanderName:
+		return balance.NewStrategy(), nil
 	}
 	return nil, errors.NewAutoscalerError(errors.InternalError, "Expander %s not supported", expanderFlag)
 }
