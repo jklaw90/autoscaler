@@ -197,12 +197,12 @@ func (u *updater) RunOnce(ctx context.Context) {
 		vpaSize := len(livePods)
 		controlledPodsCounter.Add(vpaSize, vpaSize)
 		evictionLimiter := u.evictionFactory.NewPodsEvictionRestriction(livePods, vpa)
-		podsForUpdate := u.getPodsUpdateOrder(filterNonEvictablePods(livePods, evictionLimiter), vpa)
-		evictablePodsCounter.Add(vpaSize, len(podsForUpdate))
+		evictablePodsForUpdate := u.getPodsUpdateOrder(filterNonEvictablePods(livePods, evictionLimiter), vpa)
+		evictablePodsCounter.Add(vpaSize, len(evictablePodsForUpdate))
 
 		withEvictable := false
 		withEvicted := false
-		for _, pod := range podsForUpdate {
+		for _, pod := range evictablePodsForUpdate {
 			withEvictable = true
 			if !evictionLimiter.CanEvict(pod) {
 				continue
@@ -258,6 +258,16 @@ func (u *updater) getPodsUpdateOrder(pods []*apiv1.Pod, vpa *vpa_types.VerticalP
 	}
 
 	return priorityCalculator.GetSortedPods(u.evictionAdmission)
+}
+
+func filterOutNonEvictablePods(pods []*apiv1.Pod, evictionRestriction eviction.PodsEvictionRestriction) []*apiv1.Pod {
+	result := make([]*apiv1.Pod, 0)
+	for _, pod := range pods {
+		if evictionRestriction.CanEvict(pod) {
+			result = append(result, pod)
+		}
+	}
+	return result
 }
 
 func filterNonEvictablePods(pods []*apiv1.Pod, evictionRestriction eviction.PodsEvictionRestriction) []*apiv1.Pod {

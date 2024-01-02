@@ -166,6 +166,11 @@ const (
 	// creation and additionally can update them during the lifetime of the
 	// pod by deleting and recreating the pod.
 	UpdateModeRecreate UpdateMode = "Recreate"
+
+	// TODO Document
+	UpdateInPlaceOnly UpdateMode = "InPlaceOnly"
+	InPlaceOrRecreate UpdateMode = "InPlaceOrRecreate"
+
 	// UpdateModeAuto means that autoscaler assigns resources on pod creation
 	// and additionally can update them during the lifetime of the pod,
 	// using any available update method. Currently this is equivalent to

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    resizePolicy:
+      - resourceName: memory
+        restartPolicy: RestartContainer
+      - resourceName: cpu
+        restartPolicy: NotRequired
+    resources:
+      limits:
+        cpu: 20m
+        memory: 100Mi
+      requests:
+        cpu: 2m
+        memory: 20Mi
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
