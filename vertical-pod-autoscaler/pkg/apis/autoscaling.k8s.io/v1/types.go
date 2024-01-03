@@ -151,7 +151,7 @@ type PodUpdatePolicy struct {
 }
 
 // UpdateMode controls when autoscaler applies changes to the pod resources.
-// +kubebuilder:validation:Enum=Off;Initial;Recreate;Auto
+// +kubebuilder:validation:Enum=Off;Initial;Recreate;InPlaceOnly;InPlaceOrRecreate;Auto
 type UpdateMode string
 
 const (

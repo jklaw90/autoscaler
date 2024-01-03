@@ -13,12 +13,14 @@ spec:
   # recommenders field can be unset when using the default recommender.
   # When using an alternative recommender, the alternative recommender's name
   # can be specified as the following in a list.
-  # recommenders: 
+  # recommenders:
   #   - name: 'alternative'
   targetRef:
     apiVersion: "apps/v1"
     kind: Deployment
     name: hamster
+  updatePolicy:
+    updateMode: InPlaceOnly
   resourcePolicy:
     containerPolicies:
       - containerName: '*'
@@ -50,6 +52,11 @@ spec:
       containers:
         - name: hamster
           image: registry.k8s.io/ubuntu-slim:0.1
+          resizePolicy:
+            - resourceName: memory
+              restartPolicy: NotRequired
+            - resourceName: cpu
+              restartPolicy: NotRequired
           resources:
             requests:
               cpu: 100m

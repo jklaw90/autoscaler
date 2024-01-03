@@ -39,6 +39,8 @@ var (
 		string(vpa_types.UpdateModeOff),
 		string(vpa_types.UpdateModeInitial),
 		string(vpa_types.UpdateModeRecreate),
+		string(vpa_types.UpdateInPlaceOnly),
+		string(vpa_types.UpdateInPlaceOrRecreate),
 		string(vpa_types.UpdateModeAuto),
 	}
 )

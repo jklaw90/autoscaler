@@ -143,9 +143,9 @@ func (u *updater) RunOnce(ctx context.Context) {
 	for _, vpa := range vpaList {
 		updateMode := vpa_api_util.GetUpdateMode(vpa)
 		if updateMode != vpa_types.UpdateModeRecreate &&
-			updateMode != vpa_types.UpdateModeAuto &&
-			// updateMode != vpa_types.UpdateInPlaceOrRecreate && //ignoring this mode for now
-			updateMode != vpa_types.UpdateInPlaceOnly {
+			updateMode != vpa_types.UpdateInPlaceOnly &&
+			updateMode != vpa_types.UpdateInPlaceOrRecreate &&
+			updateMode != vpa_types.UpdateModeAuto {
 			klog.V(3).Infof("skipping VPA object %v because its mode is not \"Recreate\" or \"Auto\"", vpa.Name)
 			continue
 		}
@@ -209,6 +209,7 @@ func (u *updater) RunOnce(ctx context.Context) {
 		vpaSize := len(livePods)
 		controlledPodsCounter.Add(vpaSize, vpaSize)
 		evictionLimiter := u.evictionFactory.NewPodsEvictionRestriction(livePods, vpa)
+
 		podsForUpdate := u.getPodsUpdateOrder(filterNonEvictablePods(livePods, evictionLimiter, vpa), vpa)
 		evictablePodsCounter.Add(vpaSize, len(podsForUpdate))
 
@@ -216,13 +217,19 @@ func (u *updater) RunOnce(ctx context.Context) {
 		withEvicted := false
 		for _, pod := range podsForUpdate {
 			if vpa_api_util.GetUpdateMode(vpa) == vpa_types.UpdateInPlaceOnly {
+				klog.V(6).Infof("looking to update pod %v", pod.Name)
 				// TODO update here
 				// if can patch (check pod spec)
+				for _, c := range pod.Spec.Containers {
+					c.ResizePolicy
+				}
 				patches, err := u.patchCalculator.CalculatePatches(pod, vpa)
 				if err != nil {
 					klog.Warningf("patch calculation for pod %v failed: %v", pod.Name, err)
 					continue
 				}
+				klog.V(6).Infof("patches: %+v", patches)
+
 				patchesBytes, err := json.Marshal(patches)
 				if err != nil {
 					klog.Warningf("patch marshal for pod %v failed: %v", pod.Name, err)
@@ -300,6 +307,11 @@ func filterOutNonEvictablePods(pods []*apiv1.Pod, evictionRestriction eviction.P
 			result = append(result, pod)
 		}
 	}
+	return result
+}
+
+func filterInPlaceOnlyPods(pods []*apiv1.Pod, evictionRestriction eviction.PodsEvictionRestriction, vpa *vpa_types.VerticalPodAutoscaler) []*apiv1.Pod {
+	result := make([]*apiv1.Pod, 0)
 	return result
 }
 
