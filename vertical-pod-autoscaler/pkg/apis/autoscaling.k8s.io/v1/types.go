@@ -168,8 +168,8 @@ const (
 	UpdateModeRecreate UpdateMode = "Recreate"
 
 	// TODO Document
-	UpdateInPlaceOnly UpdateMode = "InPlaceOnly"
-	InPlaceOrRecreate UpdateMode = "InPlaceOrRecreate"
+	UpdateInPlaceOnly       UpdateMode = "InPlaceOnly"
+	UpdateInPlaceOrRecreate UpdateMode = "InPlaceOrRecreate"
 
 	// UpdateModeAuto means that autoscaler assigns resources on pod creation
 	// and additionally can update them during the lifetime of the pod,

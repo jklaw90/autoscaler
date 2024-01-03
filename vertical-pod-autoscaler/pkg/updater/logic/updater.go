@@ -18,14 +18,18 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"golang.org/x/time/rate"
 
 	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/admission-controller/resource/pod/patch"
 	vpa_types "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	vpa_clientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	vpa_lister "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/listers/autoscaling.k8s.io/v1"
@@ -52,6 +56,7 @@ type Updater interface {
 }
 
 type updater struct {
+	kubeClient                   kube_client.Interface
 	vpaLister                    vpa_lister.VerticalPodAutoscalerLister
 	podLister                    v1lister.PodLister
 	eventRecorder                record.EventRecorder
@@ -63,6 +68,7 @@ type updater struct {
 	selectorFetcher              target.VpaTargetSelectorFetcher
 	useAdmissionControllerStatus bool
 	statusValidator              status.Validator
+	patchCalculator              patch.Calculator
 }
 
 // NewUpdater creates Updater with given configuration
@@ -79,6 +85,7 @@ func NewUpdater(
 	evictionAdmission priority.PodEvictionAdmission,
 	selectorFetcher target.VpaTargetSelectorFetcher,
 	priorityProcessor priority.PriorityProcessor,
+	patchCalculator patch.Calculator,
 	namespace string,
 ) (Updater, error) {
 	evictionRateLimiter := getRateLimiter(evictionRateLimit, evictionRateBurst)
@@ -87,6 +94,7 @@ func NewUpdater(
 		return nil, fmt.Errorf("Failed to create eviction restriction factory: %v", err)
 	}
 	return &updater{
+		kubeClient:                   kubeClient,
 		vpaLister:                    vpa_api_util.NewVpasLister(vpaClient, make(chan struct{}), namespace),
 		podLister:                    newPodLister(kubeClient, namespace),
 		eventRecorder:                newEventRecorder(kubeClient),
@@ -102,6 +110,7 @@ func NewUpdater(
 			status.AdmissionControllerStatusName,
 			statusNamespace,
 		),
+		patchCalculator: patchCalculator,
 	}, nil
 }
 
@@ -132,8 +141,11 @@ func (u *updater) RunOnce(ctx context.Context) {
 	vpas := make([]*vpa_api_util.VpaWithSelector, 0)
 
 	for _, vpa := range vpaList {
-		if vpa_api_util.GetUpdateMode(vpa) != vpa_types.UpdateModeRecreate &&
-			vpa_api_util.GetUpdateMode(vpa) != vpa_types.UpdateModeAuto {
+		updateMode := vpa_api_util.GetUpdateMode(vpa)
+		if updateMode != vpa_types.UpdateModeRecreate &&
+			updateMode != vpa_types.UpdateModeAuto &&
+			// updateMode != vpa_types.UpdateInPlaceOrRecreate && //ignoring this mode for now
+			updateMode != vpa_types.UpdateInPlaceOnly {
 			klog.V(3).Infof("skipping VPA object %v because its mode is not \"Recreate\" or \"Auto\"", vpa.Name)
 			continue
 		}
@@ -197,12 +209,33 @@ func (u *updater) RunOnce(ctx context.Context) {
 		vpaSize := len(livePods)
 		controlledPodsCounter.Add(vpaSize, vpaSize)
 		evictionLimiter := u.evictionFactory.NewPodsEvictionRestriction(livePods, vpa)
-		evictablePodsForUpdate := u.getPodsUpdateOrder(filterNonEvictablePods(livePods, evictionLimiter), vpa)
-		evictablePodsCounter.Add(vpaSize, len(evictablePodsForUpdate))
+		podsForUpdate := u.getPodsUpdateOrder(filterNonEvictablePods(livePods, evictionLimiter, vpa), vpa)
+		evictablePodsCounter.Add(vpaSize, len(podsForUpdate))
 
 		withEvictable := false
 		withEvicted := false
-		for _, pod := range evictablePodsForUpdate {
+		for _, pod := range podsForUpdate {
+			if vpa_api_util.GetUpdateMode(vpa) == vpa_types.UpdateInPlaceOnly {
+				// TODO update here
+				// if can patch (check pod spec)
+				patches, err := u.patchCalculator.CalculatePatches(pod, vpa)
+				if err != nil {
+					klog.Warningf("patch calculation for pod %v failed: %v", pod.Name, err)
+					continue
+				}
+				patchesBytes, err := json.Marshal(patches)
+				if err != nil {
+					klog.Warningf("patch marshal for pod %v failed: %v", pod.Name, err)
+					continue
+				}
+
+				_, err = u.kubeClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, types.JSONPatchType, patchesBytes, metav1.PatchOptions{})
+				if err != nil {
+					klog.Warningf("patch for pod %v failed: %v", pod.Name, err)
+				}
+				continue
+			}
+
 			withEvictable = true
 			if !evictionLimiter.CanEvict(pod) {
 				continue
@@ -270,9 +303,13 @@ func filterOutNonEvictablePods(pods []*apiv1.Pod, evictionRestriction eviction.P
 	return result
 }
 
-func filterNonEvictablePods(pods []*apiv1.Pod, evictionRestriction eviction.PodsEvictionRestriction) []*apiv1.Pod {
+func filterNonEvictablePods(pods []*apiv1.Pod, evictionRestriction eviction.PodsEvictionRestriction, vpa *vpa_types.VerticalPodAutoscaler) []*apiv1.Pod {
 	result := make([]*apiv1.Pod, 0)
 	for _, pod := range pods {
+		if vpa_api_util.GetUpdateMode(vpa) == vpa_types.UpdateInPlaceOnly {
+			result = append(result, pod)
+			continue
+		}
 		if evictionRestriction.CanEvict(pod) {
 			result = append(result, pod)
 		}

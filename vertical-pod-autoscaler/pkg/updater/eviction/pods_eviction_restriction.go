@@ -100,10 +100,10 @@ type podReplicaCreator struct {
 func (e *podsEvictionRestrictionImpl) CanEvict(pod *apiv1.Pod) bool {
 	cr, present := e.podToReplicaCreatorMap[getPodID(pod)]
 	if present {
-		singleGroupStats, present := e.creatorToSingleGroupStatsMap[cr]
 		if pod.Status.Phase == apiv1.PodPending {
 			return true
 		}
+		singleGroupStats, present := e.creatorToSingleGroupStatsMap[cr]
 		if present {
 			shouldBeAlive := singleGroupStats.configured - singleGroupStats.evictionTolerance
 			if singleGroupStats.running-singleGroupStats.evicted > shouldBeAlive {

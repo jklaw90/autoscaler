@@ -24,6 +24,8 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/common"
+	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/admission-controller/resource/pod/patch"
+	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/admission-controller/resource/pod/recommendation"
 	vpa_clientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/target"
 	updater "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/updater/logic"
@@ -81,6 +83,7 @@ func main() {
 	config := common.CreateKubeConfigOrDie(*kubeconfig, float32(*kubeApiQps), int(*kubeApiBurst))
 	kubeClient := kube_client.NewForConfigOrDie(config)
 	vpaClient := vpa_clientset.NewForConfigOrDie(config)
+
 	factory := informers.NewSharedInformerFactory(kubeClient, defaultResyncPeriod)
 	targetSelectorFetcher := target.NewVpaTargetSelectorFetcher(config, kubeClient, factory)
 	var limitRangeCalculator limitrange.LimitRangeCalculator
@@ -89,6 +92,10 @@ func main() {
 		klog.Errorf("Failed to create limitRangeCalculator, falling back to not checking limits. Error message: %s", err)
 		limitRangeCalculator = limitrange.NewNoopLimitsCalculator()
 	}
+
+	// added for patches
+	recommendationProvider := recommendation.NewProvider(limitRangeCalculator, vpa_api_util.NewCappingRecommendationProcessor(limitRangeCalculator))
+
 	admissionControllerStatusNamespace := status.AdmissionControllerStatusNamespace
 	if namespace != "" {
 		admissionControllerStatusNamespace = namespace
@@ -107,6 +114,7 @@ func main() {
 		priority.NewScalingDirectionPodEvictionAdmission(),
 		targetSelectorFetcher,
 		priority.NewProcessor(),
+		patch.NewResourceUpdatesCalculator(recommendationProvider),
 		*vpaObjectNamespace,
 	)
 	if err != nil {
