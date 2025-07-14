@@ -20,7 +20,7 @@ set -o pipefail
 
 KUBE_ROOT=$(dirname "${BASH_SOURCE}")/..
 
-go install golang.org/x/lint/golint@latest
+go install golang.org/x/lint/golint@v1.64.8 #v2 causes too many new issues
 
 go install github.com/tools/godep@latest
 
